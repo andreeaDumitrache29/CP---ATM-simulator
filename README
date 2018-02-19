@@ -1,0 +1,179 @@
+DUMITRACHE Daniela Andreea
+321CB
+Tema2 - Protocoale de comunicatie
+
+		============ lib. h ============
+
+	Acest fisier contine structura care retine informatiile despre un client: nume,
+prenume, numarul de card, pin-ul, parola pentru unlock, sold-ul, numarul de incercari de
+logare esuate si socket-ul pe care este logat. De asemenea, aici se mai afla 2 functii:
+	
+	- int checkString(char* string, char*buffer): primeste 2 siruri si verifica daca
+	  primele n caractere din sirul 1 corespund cu cele din al doilea sir, unde n = numarul
+	  de caractere din sirul 2.
+	
+	- showUser(user u): functie care afiseaza campurile unei structuri e tip user.
+
+		============ client.c ============
+
+	Clientul contine decat functia main. Aceasta incepe prin declararea datelor necesare 
+multiplexarii comunicatiei (conexiunii tcp) : o structura de tip sockaddr_in, o multime
+de tip fd_set pentru a retine clientii cu care comunicam, precum si o multime temporara
+, pentru a fi data ca argument ulterior functiei select, si numarul maxim de file-descriptori.
+	
+	Golim multimea de descriptori de citire read_fds si multimea temporara tmp_fds. 
+Extragem pid-ul procesului curent folosind functia getpid, construim numele fisierului de
+log curent si il deschidem pentru scriere. 
+	Deschidem socket pentru conexiunea tcp folosind functia socket, setam campurile 
+structurii de tip sockaddr_in si setam in multimea read_fds drept socketi cu care vrem
+sa comunicam stdin-ul si socketul returnat de functia socket. Apelam apoi connect pentru
+a lansa o cerere de conexiune catre server.
+	
+	Pentru realizarea conexiunii udp folosim tot o structura de tip sockaddr_in.
+Deschidem socket-ul pentru conexiunea udp folosind socket, il introducem
+si pe acesta in multimea socketilor cu care vrem sa comunicam (read_fds), 
+si setam campurile structurii de tip sockaddr_in.
+	
+	In bucla while pentru citirea mesajelor:
+	Realizam apelul select pentru realizarea multiplexarii comunicatiei si verificam
+care dintre socketii pe care asteptam sa vina un mesaj este setat.
+	
+	a) cazul 0 (stdin): citim mesajul primit si il scriem in fisierul de log.Dupa aceasta, 
+verificam ce fel de comanda am primit.
+	
+	In caz ca am primit un mesaj de login, verificam intai daca avem deja un user logat
+in procesul curent (variabila login are valoarea 1 in acest caz). Daca da, atunci vom
+afisa codul de eroare -2: Sesiune deja deschisa si vom trece la primirea urmatorului
+mesaj. In caz contrar, transmitem mesajul mai departe serverului si retinem
+numarul de card primit pentru a fi folosit in caz de unlock.
+	
+	In caz ca primim mesaj de logout verificam intai daca avem un client logat in
+procesul curent. In caz contrar, se returneaza codul de eroare -1. Altfel, trimitem
+serverului mesajul de logout. De asemenea, variabila login devine 0, pentru a sti
+ca un nou client se poate acum loga in procesul curent.
+	
+	In caz ca primim o comanda de getmoney verificam intai daca exista un client
+logat in procesul curent, caz in care se trimite mai departe mesajul de getmoney.
+Daca nu exista niciun client logat se returneaza codul de eroare -1.
+	
+	In cazul comenzii putmoney se parcurg aceeasi pasi ca mai sus: verificam daca
+exista un client logat si transmitem mesajul mai departe daca totul este in regula.
+Altfel se afiseaza codul de eroare -1.
+	
+	In cazul primirii unei comenzi de quit nu am mai tinut cont de faptul ca 
+s-ar putea sa nu fie niciun client logat, deci operatia se poate executa oricum.
+Trimitem mesajul de logout serverului si iesim din bucla de primire mesaje.
+De asemenea, se afiseaza mesajul "Clientul se inchide" in fisierul de log.
+	
+	In cazul in care primim o comanda de unlock: construim mesajul pentru server
+care este de forma: numar_card unlock si il trimitem folosind conexiunea udp
+si functia sento. Apoi asteptam raspunsul serverului folosind functia recvfrom.
+Daca am primit mesajul de introducere parola secreta, atunci variabila parola devine 1
+pentru a sti la primirea urmatorului mesaj de la stdin, care nu este o comanda valida,
+ca acesta reprezinta o parola pentru unlock. Dupa acest pas se continua bucla de primire
+mesaje. 
+	
+	In cazul in care nu primim nicio comanda valida de la stdin si variabila parola
+are valoarea 1 inseamna ca am primit o parola secreta de la stdin. Construim mesajul de 
+trimis serverului, care are forma numar_card parola_secreta si il trimitem
+serverului pe socketul de udp. Asteptam inapoi raspunsul folosind functia recvfrom
+si variabila parola redevine 0 pentru a nu accepta introducerea a doua parole succesiv.
+	
+	b) primim un mesaj de la server si il afisam la termial si in fisierul de log.
+	Verificam daca serverul a trimis un mesaj de quit, caz in care se inchide si clientul curent.
+Se afiseaza de asemenea mesajul "Serverul se inchide".
+	Verificam daca s-a facut login cu succes, caz in care variabila login devine 1, pentru
+a memora acest lucru astfel incat sa nu permitem alte logari.
+
+	Mentionez ca pentru realizarea conexiunilor am preluat din codul scheletelor 
+laboratoarelor de udp si de multiplexare tcp (6 si 8).
+	
+
+		============ server.c ============
+
+	- int checkOpenSession(user* vect, int nr_card, int N): functia intoarce 1 daca exista deja
+un client cu numarul de card dat logat in momentul acesta si 0 in caz contrar.
+Am presupus ca un singur user poate fi logat la un moment dat pe un socket (intr-un proces).
+
+	- getClient(user* vect, int socket, int N): functia intoarce userul logat pe socketul
+primit ca parametru
+
+	- getCl(user* vect, int nr_card, int N): functia intoarce userul logat cu numarul de
+card primit ca parametru  
+
+	- functia main:
+
+	Deschidem fisierul de unde vom lua informatiile despre utilizatori folosind fopen.
+Citim numarul de useri folosind fgets. Creem vector de structuri de tip user in care vom
+retine fiecare user. Citim informatiile pentru fiecare user folosind scanf si il introducem in 
+vectorul de useri. 
+
+	Declaram datele pentru conexiunea tcp asemanator modului descris in client,
+cu exceptia faptului ca aici folosim doua structurisde tipul struct_addr_in: una pentru server
+(pe care se va face bind) si una pentru client, cu care se va face recvfrom si sendto.
+Deschidem socketul pentru conexiunea tcp, setam datele structurii si asignam adresa specificata 
+de strctura socket-ului de tcp. De asemenea, se apeleaza listen pentru a astepta venirea unei
+cereri de conexiune din partea clientilor.
+
+	Pentru realizarea conexiunii udp: deschidem socket-ul, setam structura sockaddr_in pentru
+a asculta pe portul respectiv, legam proprietatile de socket folosind bind si setam porturile cu
+care vom comunica.
+
+	In bucla de primire mesaje:
+	Apelam select pentru realizarea multiplexarii comunicatiei. Parcurgem lista tutror socket-ilor:
+	
+	Daca am primit un mesaj pe un socket inactiv facem accept si adaugam noul socket intors de accept
+la multimea socket-ilor de la care astept mesaje.
+
+	Daca primim un mesaj de la stdin presupun automat ca este un mesaj de quit, deci il trimit mai
+departe tuturor clientilor pentru a-i notifica, apoi inchid fisierul si socketii deschisi si se
+incheie executia programului. 
+	OBS: socketii de notificat incep de la 5 deoarece socketii 0-2 sunt pentru stdin, stdout si stderr, 
+socketul 3 este cel al server-ului si socketul 4 este al conexiunii udp.
+
+	Daca am primit un mesaj pe socketul de udp apelam recvfrom pentru a primi mesajul si verificam
+daca am primit o comanda de unlock. Daca da, extragem numarul de card si verificam daca cardul
+respectiv exista si daca era intr-adevar blocat. In caz ca numarul de card nu exista se intoarce
+codul de eroare -4; Daca cardul nu era bloat se intoarce codul de eroare -6;
+
+	Daca nu am primit o comanda de unlock vom extrage numarul de card si parola secreta primita
+si verificam daca parola primita este identica cu parola din fisier corespunzatoare cardului 
+respectiv. Daca parolele sunt identice, atunci deblocarea se efectueaza cu succes. Altfel se
+intoarce codul de eroare -7 pentru deblocare esuata.
+	
+	Pentru restul socketilor: verificam mesajul primit.
+	
+	a) caz login: extragem pin-ul si numarul de card primite si verificam daca userul cu numarul
+de card respectiv este deja logat pe un proces. Parcurgem vectorul de useri pentru a-l gasi pe
+cel cu numarul de card primit. Daca am gasit respectivul user, verificam daca am primit un pin corect.
+In caz pozitiv, trimitem mesajul de login efectuat cu succes. Altfel, trimitem codul de eroare -3.
+Daca am parcurs tot vectorul de useri fara a gasi numarul de card primit atunci acesta nu exista
+si returnam codul de eroare -4. Verificam de asemenea daca numarul de incercari esuate login pentru
+numarul de card primit a ajuns la sau depaseste 3, caz in care cardul este blocat si clientul
+trebuie sa fie notificat in mod corespunzator.
+
+	OBS: numarul de incercari esuate se cumuleaza pentru un numar de card indiferent de sesiunea
+din care se incearca logarea gresita si indiferent daca intre 2 operatii de login (cu pin gresit)
+pentru respectivul numar de card au mai fost efectuate alte operatii. Numarul de incercari gresite
+se reseteaza doar la login.
+
+	b) caz logout: verificam daca cardul nu este blocat. Cautam userul logat in procesul curent
+si resetam socket-ul pe care acesta era logat si numarul de incercari esuate de logare. Prin 
+resetarea socketului se marcheaza faptul ca userul nu mai este logat.
+
+	c) caz listsold: verificam daca userul de pe socket-ul curent este blocat. Daca nu, extragem
+sold-ul acestuia si construim reply-ul corespunzator pentru client.
+
+	d) caz getmoney:cautam userul logat pe socket-ul curent si verificam daca cardul este blocat. 
+Daca nu, atunci extragem suma primita si verificam daca este multiplu de 10. In caz contrar, se7
+intoarce codul de eroare -9. Dupa aceea se verifica daca suma este mai mica sau egala cu sold-ul 
+curent al user-ului. In caz contrar se intoarce codul de eroare -8. Daca toate conditiile sunt 
+indeplinite, atunci scadem suma primita din soldul userului si returnam mesajul de succes.
+
+	e) caz putmoney: cautam userul logat pe socket-ul curent si verificam daca cardul este blocat. 
+Daca nu, atunci extragem suma primita ca un doubl cu 2 zecimale si o adaugam sol-dului userului 
+logat in procesul curent.
+
+	f) caz logout: cautam userul logat pe socket-ul curent si resetam socket-ul pentru user-ul
+respectiv. De asemenea, scoatm socketul care urmeaza sa se inchida din lista de socketi cu care
+comunicam.
